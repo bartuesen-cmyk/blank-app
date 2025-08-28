@@ -721,11 +721,8 @@ if 'ahp_results' in st.session_state:
                     
                     # Değerlendirme tipine göre güvenli değer hesapla
                     if evaluation_types[criterion] == "Sayısal Değer":
-                        # Sayısal mod için güvenli aralık kontrolü
-                        if current_value > 9999999.0 or current_value < 0:
-                            safe_current_value = 100.0
-                        else:
-                            safe_current_value = current_value
+                        # Text input kullanarak sayısal değer girişi - KILIT SORUNU ÇÖZÜLDİ
+                        current_value = st.session_state[performance_matrix_key][i, j]
                         
                         # Birim önerisi
                         unit_suggestions = {
@@ -739,14 +736,33 @@ if 'ahp_results' in st.session_state:
                                 suggested_unit = f" ({unit})"
                                 break
                         
-                        value = st.number_input(
+                        # Text input ile sayı girişi
+                        text_value = st.text_input(
                             f"**{criterion}**{suggested_unit}", 
-                            min_value=0.0,
-                            max_value=9999999.0,
-                            value=float(safe_current_value),
-                            key=f"perf_{i}_{j}",
-                            help=f"Bu kriter için {supplier}'in gerçek değerini girin"
+                            value=str(current_value) if current_value != 100.0 else "",
+                            key=f"perf_text_{i}_{j}",
+                            help=f"Bu kriter için {supplier}'in gerçek değerini girin (örn: 15000, 250.50)",
+                            placeholder="Örn: 15000, 250.50"
                         )
+                        
+                        # Text'i sayıya çevir
+                        try:
+                            if text_value.strip() == "":
+                                value = 0.0
+                            else:
+                                # Virgül kullanımını destekle (Türkçe sayı formatı)
+                                clean_value = text_value.replace(",", ".").strip()
+                                value = float(clean_value)
+                                
+                                if value < 0:
+                                    st.error(f"Negatif değer giremezsiniz: {value}")
+                                    value = 0.0
+                                elif value > 9999999:
+                                    st.warning(f"Çok büyük değer: {value}. Maksimum 9,999,999")
+                                    value = 9999999.0
+                        except ValueError:
+                            st.error(f"Geçersiz sayı formatı: '{text_value}'. Örn: 123, 15.50")
+                            value = current_value  # Eski değeri koru
                     else:
                         # 1-10 skala için güvenli aralık kontrolü
                         if current_value > 10.0 or current_value < 1.0:

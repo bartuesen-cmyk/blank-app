@@ -721,7 +721,7 @@ if 'ahp_results' in st.session_state:
                     current_value = st.session_state[performance_matrix_key][i, j]
                     
                     if evaluation_types[criterion] == "Sayısal Değer":
-                        # Sayısal değer girişi - DÜZELTİLMİŞ
+                        # Sayısal değer girişi - HATA DÜZELTİLMİŞ
                         unit_suggestions = {
                             "maliyet": "TL",
                             "fiyat": "TL", 
@@ -740,15 +740,18 @@ if 'ahp_results' in st.session_state:
                                 suggested_unit = f" ({unit})"
                                 break
                         
-                        # BAŞLICA DÜZELTME: step ve format parametreleri kaldırıldı
-                        # min_value ve max_value daha geniş yapıldı
+                        # Güvenli değer kontrolü - max değerden büyükse sıfırla
+                        safe_current_value = current_value
+                        if current_value > 9999999.0:
+                            safe_current_value = 100.0
+                        
                         value = st.number_input(
                             f"**{criterion}**{suggested_unit}", 
                             min_value=0.0,
-                            max_value=999999.0,  # Çok büyük sayılara izin ver
-                            value=float(current_value),
+                            max_value=9999999.0,  # Daha büyük limit
+                            value=float(safe_current_value),
                             key=f"perf_{i}_{j}",
-                            help=f"Bu kriter için {supplier}'in gerçek değerini girin (0-999999 arası)"
+                            help=f"Bu kriter için {supplier}'in gerçek değerini girin"
                         )
                     else:
                         # 1-10 skala girişi - Tam sayı artırımı için DÜZELTİLMİŞ

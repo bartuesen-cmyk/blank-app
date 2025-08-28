@@ -690,19 +690,18 @@ if 'ahp_results' in st.session_state:
         
         st.write("**Her tedarikçi için performans verilerini girin:**")
         
-        # Performans matrisini başlat - DÜZELTİLMİŞ HALİ
+        # Performans matrisini başlat - TAMAMEN DÜZELTİLMİŞ
         performance_matrix_key = f"performance_matrix_{len(supplier_names)}_{len(results['criterion_names'])}"
+        
+        # Her zaman kontrol et ve gerekirse sıfırla
         if (performance_matrix_key not in st.session_state):
-            # İlk değer olarak değerlendirme tipine göre set et
-            initial_matrix = np.ones((len(supplier_names), len(results['criterion_names'])), dtype=float)
-            for j, criterion in enumerate(results['criterion_names']):
-                for i in range(len(supplier_names)):
-                    if evaluation_types[criterion] == "1-10 Skala":
-                        initial_matrix[i, j] = 5.0  # 1-10 skala için başlangıç değeri
-                    else:
-                        initial_matrix[i, j] = 100.0  # Sayısal değer için başlangıç değeri
-            
-            st.session_state[performance_matrix_key] = initial_matrix
+            st.session_state[performance_matrix_key] = np.ones((len(supplier_names), len(results['criterion_names'])), dtype=float) * 5.0
+        
+        # Mevcut matris boyutları uygun mu kontrol et
+        current_matrix = st.session_state[performance_matrix_key]
+        if (current_matrix.shape[0] != len(supplier_names) or 
+            current_matrix.shape[1] != len(results['criterion_names'])):
+            st.session_state[performance_matrix_key] = np.ones((len(supplier_names), len(results['criterion_names'])), dtype=float) * 5.0
         
         # Performans matrisi girişi - DÜZELTİLMİŞ SECTION
         st.markdown("### Performans Matrisi")
@@ -720,51 +719,51 @@ if 'ahp_results' in st.session_state:
                 with cols[j % num_cols]:
                     current_value = st.session_state[performance_matrix_key][i, j]
                     
+                    # Değerlendirme tipine göre güvenli değer hesapla
                     if evaluation_types[criterion] == "Sayısal Değer":
-                        # Sayısal değer girişi - HATA DÜZELTİLMİŞ
-                        unit_suggestions = {
-                            "maliyet": "TL",
-                            "fiyat": "TL", 
-                            "süre": "gün",
-                            "zaman": "gün",
-                            "mesafe": "km",
-                            "kapasite": "adet",
-                            "oran": "%",
-                            "hız": "km/h"
-                        }
+                        # Sayısal mod için güvenli aralık kontrolü
+                        if current_value > 9999999.0 or current_value < 0:
+                            safe_current_value = 100.0
+                        else:
+                            safe_current_value = current_value
                         
                         # Birim önerisi
+                        unit_suggestions = {
+                            "maliyet": "TL", "fiyat": "TL", "süre": "gün", "zaman": "gün",
+                            "mesafe": "km", "kapasite": "adet", "oran": "%", "hız": "km/h"
+                        }
+                        
                         suggested_unit = ""
                         for keyword, unit in unit_suggestions.items():
                             if keyword in criterion.lower():
                                 suggested_unit = f" ({unit})"
                                 break
                         
-                        # Güvenli değer kontrolü - max değerden büyükse sıfırla
-                        safe_current_value = current_value
-                        if current_value > 9999999.0:
-                            safe_current_value = 100.0
-                        
                         value = st.number_input(
                             f"**{criterion}**{suggested_unit}", 
                             min_value=0.0,
-                            max_value=9999999.0,  # Daha büyük limit
+                            max_value=9999999.0,
                             value=float(safe_current_value),
                             key=f"perf_{i}_{j}",
                             help=f"Bu kriter için {supplier}'in gerçek değerini girin"
                         )
                     else:
-                        # 1-10 skala girişi - Tam sayı artırımı için DÜZELTİLMİŞ
+                        # 1-10 skala için güvenli aralık kontrolü
+                        if current_value > 10.0 or current_value < 1.0:
+                            safe_current_value = 5
+                        else:
+                            safe_current_value = int(current_value)
+                        
                         value = st.number_input(
                             f"**{criterion}** (1-10)", 
-                            min_value=1,  # int olarak
-                            max_value=10,  # int olarak
-                            value=int(current_value),  # int'e çevir
-                            step=1,  # Tam sayı adımları
+                            min_value=1,
+                            max_value=10,
+                            value=safe_current_value,
+                            step=1,
                             key=f"perf_{i}_{j}",
-                            help=f"1=Çok Kötü, 10=Mükemmel (tam sayı değerleri)"
+                            help="1=Çok Kötü, 10=Mükemmel (tam sayı değerleri)"
                         )
-                        value = float(value)  # Sonra tekrar float'a çevir
+                        value = float(value)
                     
                     row.append(value)
                     st.session_state[performance_matrix_key][i, j] = value

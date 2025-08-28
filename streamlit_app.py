@@ -690,15 +690,21 @@ if 'ahp_results' in st.session_state:
         
         st.write("**Her tedarikçi için performans verilerini girin:**")
         
-        # Performans matrisini başlat
-        if ('performance_matrix' not in st.session_state or 
-            len(supplier_names) != st.session_state.get('last_num_suppliers', 0)):
+        # Performans matrisini başlat - DÜZELTİLMİŞ HALİ
+        performance_matrix_key = f"performance_matrix_{len(supplier_names)}_{len(results['criterion_names'])}"
+        if (performance_matrix_key not in st.session_state):
+            # İlk değer olarak değerlendirme tipine göre set et
+            initial_matrix = np.ones((len(supplier_names), len(results['criterion_names'])), dtype=float)
+            for j, criterion in enumerate(results['criterion_names']):
+                for i in range(len(supplier_names)):
+                    if evaluation_types[criterion] == "1-10 Skala":
+                        initial_matrix[i, j] = 5.0  # 1-10 skala için başlangıç değeri
+                    else:
+                        initial_matrix[i, j] = 100.0  # Sayısal değer için başlangıç değeri
             
-            performance_matrix = np.ones((len(supplier_names), len(results['criterion_names'])), dtype=float) * 5
-            st.session_state['performance_matrix'] = performance_matrix
-            st.session_state['last_num_suppliers'] = len(supplier_names)
+            st.session_state[performance_matrix_key] = initial_matrix
         
-        # Performans matrisi girişi - Daha iyi düzen
+        # Performans matrisi girişi - DÜZELTİLMİŞ SECTION
         st.markdown("### Performans Matrisi")
         perf_data = []
         
@@ -707,13 +713,15 @@ if 'ahp_results' in st.session_state:
             row = []
             
             # Daha organize kolon düzeni
-            num_cols = min(4, len(results['criterion_names']))
+            num_cols = min(3, len(results['criterion_names']))  # 3 kolon max
             cols = st.columns(num_cols)
             
             for j, criterion in enumerate(results['criterion_names']):
                 with cols[j % num_cols]:
+                    current_value = st.session_state[performance_matrix_key][i, j]
+                    
                     if evaluation_types[criterion] == "Sayısal Değer":
-                        # Sayısal değer girişi - birim önerisi
+                        # Sayısal değer girişi - DÜZELTİLMİŞ
                         unit_suggestions = {
                             "maliyet": "TL",
                             "fiyat": "TL", 
@@ -732,40 +740,43 @@ if 'ahp_results' in st.session_state:
                                 suggested_unit = f" ({unit})"
                                 break
                         
+                        # BAŞLICA DÜZELTME: step ve format parametreleri kaldırıldı
+                        # min_value ve max_value daha geniş yapıldı
                         value = st.number_input(
                             f"**{criterion}**{suggested_unit}", 
                             min_value=0.0,
-                            value=float(st.session_state['performance_matrix'][i, j]) if evaluation_types[criterion] == "Sayısal Değer" else 5.0,
-                            step=0.01,
-                            format="%.2f",
+                            max_value=999999.0,  # Çok büyük sayılara izin ver
+                            value=float(current_value),
                             key=f"perf_{i}_{j}",
-                            help=f"Bu kriter için {supplier}'in gerçek değerini girin"
+                            help=f"Bu kriter için {supplier}'in gerçek değerini girin (0-999999 arası)"
                         )
                     else:
-                        # 1-10 skala girişi
+                        # 1-10 skala girişi - Tam sayı artırımı için DÜZELTİLMİŞ
                         value = st.number_input(
                             f"**{criterion}** (1-10)", 
-                            min_value=1.0, 
-                            max_value=10.0, 
-                            value=float(st.session_state['performance_matrix'][i, j]) if evaluation_types[criterion] == "1-10 Skala" else 5.0,
-                            step=0.1,
+                            min_value=1,  # int olarak
+                            max_value=10,  # int olarak
+                            value=int(current_value),  # int'e çevir
+                            step=1,  # Tam sayı adımları
                             key=f"perf_{i}_{j}",
-                            help=f"1=Çok Kötü, 10=Mükemmel"
+                            help=f"1=Çok Kötü, 10=Mükemmel (tam sayı değerleri)"
                         )
+                        value = float(value)  # Sonra tekrar float'a çevir
                     
                     row.append(value)
-                    st.session_state['performance_matrix'][i, j] = value
+                    st.session_state[performance_matrix_key][i, j] = value
+            
             perf_data.append(row)
             
-            if (j + 1) % num_cols == 0:  # Her satır sonunda boşluk
-                st.markdown("---")
+            # Her tedarikçi sonrası ayraç
+            st.markdown("---")
         
         # TOPSIS analizi
         if st.button("TOPSIS Analizini Başlat", type="primary"):
             try:
                 # Performans matrisi DataFrame'e dönüştür
                 performance_df = pd.DataFrame(
-                    st.session_state['performance_matrix'],
+                    st.session_state[performance_matrix_key],
                     index=supplier_names,
                     columns=results['criterion_names']
                 )
@@ -838,7 +849,7 @@ if 'ahp_results' in st.session_state:
                 with st.expander("Detaylı TOPSIS Analizi"):
                     st.write("**Girilen Ham Performans Verileri:**")
                     perf_display = pd.DataFrame(
-                        st.session_state['performance_matrix'],
+                        st.session_state[performance_matrix_key],
                         index=supplier_names,
                         columns=results['criterion_names']
                     )
@@ -847,9 +858,9 @@ if 'ahp_results' in st.session_state:
                     formatted_perf = perf_display.copy()
                     for criterion in results['criterion_names']:
                         if evaluation_types[criterion] == "Sayısal Değer":
-                            formatted_perf[criterion] = formatted_perf[criterion].apply(lambda x: f"{x:.2f}")
+                            formatted_perf[criterion] = formatted_perf[criterion].apply(lambda x: f"{x:,.2f}")
                         else:
-                            formatted_perf[criterion] = formatted_perf[criterion].apply(lambda x: f"{x:.1f}/10")
+                            formatted_perf[criterion] = formatted_perf[criterion].apply(lambda x: f"{x:.0f}/10")
                     
                     st.dataframe(formatted_perf, use_container_width=True)
                     
@@ -876,6 +887,7 @@ if 'ahp_results' in st.session_state:
                 
             except Exception as e:
                 st.error(f"TOPSIS hesaplama hatası: {e}")
+                st.error(f"Hata detayı: {str(e)}")
     else:
         st.warning("TOPSIS analizi için önce tutarlı bir AHP matrisi gereklidir.")
 
@@ -913,6 +925,13 @@ with st.expander("Nasıl Kullanılır?"):
     - **Gerçekçi değerlendirme:** Tedarikçiler arasındaki gerçek farkları yansıtın  
     - **Doğru kriter tipi:** Yüksek değer iyi mi (Fayda) yoksa düşük mü (Maliyet)?
     - **Karşılaştırmalı düşünce:** Mutlak değerlerden ziyade göreli performansa odaklanın
+    
+    ### Değer Girişi İpuçları
+    
+    - **Sayısal Değer Modu:** 0-999999 arası herhangi bir sayı girebilirsiniz
+    - **1-10 Skala Modu:** +/- butonları artık tam sayı artırımı yapar (5→6 veya 6→5)
+    - **Büyük sayılar:** 15000, 250000 gibi büyük değerler rahatlıkla girilebilir
+    - **Ondalık değerler:** 15.50, 1250.75 gibi ondalık sayılar desteklenir
     """)
 
 # Footer
